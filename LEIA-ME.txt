@@ -1,0 +1,22 @@
+MEU CHAT — o seu chat com IA (modular)
+
+COMO ABRIR
+- No celular: abra o index.html de dentro da pasta Meu-Chat (do jeito que você abre o Mini SK).
+  Para ficar como app: menu ⋮ do Chrome → Instalar app. No app instalado o microfone funciona.
+- Ou publique pelo Mini SK (abrir a pasta como projeto → 🚀 Publicar) e abra o endereço do GitHub Pages.
+
+PRIMEIRA VEZ
+1. Toque em ⚙️ → cole uma chave grátis do Gemini (aistudio.google.com/apikey) → Guardar.
+   Pode pôr várias chaves (Gemini, Groq, OpenRouter...). Quando uma chega no limite, ele passa para a próxima.
+2. Pronto: escreva ou toque no 🎤.
+
+O QUE TEM
+- 🎤 falar e 🔊 ouvir em voz natural (a do Gemini) · 🙌 mãos livres (conversa só por voz)
+- 📷 foto ou print para a IA ver (também dá para colar um print)
+- 🌐 pesquisar na internet (o Gemini pesquisa sozinho; para outras IAs, ponha a chave de busca em ⚙️)
+- 🔗 cole um link na mensagem: ela lê a página
+- 🧠 memória que vai em toda conversa (ela guarda sozinha o que é importante; você edita em 🧠)
+- 👁 ver funcionando: códigos HTML, TSX e JSX abrem na hora
+- 💾 backup de tudo e restaurar SEM APAGAR NADA · 📤 Drive
+
+As chaves ficam só no seu aparelho.

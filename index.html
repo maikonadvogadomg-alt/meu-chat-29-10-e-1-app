@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meu Chat</title>
+<link rel="stylesheet" href="css/app.css">
+  <!-- PWA:inicio (gerado pelo Mini SK — pode refazer no painel 📱 PWA) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Meu-Chat-29-">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script>
+    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+      addEventListener('load', function () { navigator.serviceWorker.register('service-worker.js').catch(function (e) { console.warn('Service worker:', e); }); });
+    }
+  </script>
+  <!-- PWA:fim -->
+</head>
+<body>
+<div id="app">
+  <header id="topo">
+    <button class="ic" id="bt-conversas" title="Conversas" aria-label="Conversas">☰</button>
+    <div id="titulo"><b id="tit-conversa">Meu Chat</b><span id="tit-ia" class="mudo"></span></div>
+    <span class="chip" id="versao">v29/10-E</span>
+    <button class="ic" id="bt-memoria" title="Memória" aria-label="Memória">🧠</button>
+    <button class="ic" id="bt-config" title="Configurar" aria-label="Configurar">⚙️</button>
+  </header>
+
+  <main id="conversa" aria-live="polite"></main>
+
+  <div id="anexos" hidden></div>
+  <footer id="barra">
+    <div class="linha-op">
+      <label class="op" title="Pesquisar na internet antes de responder"><input type="checkbox" id="op-busca"> 🌐 Internet</label>
+      <label class="op" title="Falar as respostas em voz natural"><input type="checkbox" id="op-falar"> 🔊 Falar</label>
+      <label class="op" title="Conversa por voz: fala e escuta sem tocar"><input type="checkbox" id="op-maos"> 🙌 Mãos livres</label>
+    </div>
+    <div class="linha-in">
+      <button class="ic" id="bt-foto" title="Mandar foto ou print" aria-label="Foto">📷</button>
+      <input type="file" id="in-foto" accept="image/*" multiple hidden>
+      <textarea id="entrada" rows="1" placeholder="Escreva, ou toque no 🎤…"></textarea>
+      <button class="ic grande" id="bt-mic" title="Falar" aria-label="Microfone">🎤</button>
+      <button class="ic grande primario" id="bt-enviar" title="Enviar" aria-label="Enviar">➤</button>
+    </div>
+  </footer>
+</div>
+
+<aside id="gaveta" class="painel" hidden>
+  <div class="cab"><b>💬 Conversas</b><button class="ic" data-fechar>✕</button></div>
+  <div class="linha"><button class="bt primario" id="bt-nova">＋ Nova conversa</button></div>
+  <input class="campo" id="busca-conv" placeholder="Procurar nas conversas…">
+  <div id="lista-conv"></div>
+  <hr>
+  <div class="linha"><button class="bt" id="bt-backup">⤓ Backup de tudo</button><button class="bt" id="bt-drive">📤 Drive</button><button class="bt" id="bt-restaurar">⤒ Restaurar</button></div>
+  <input type="file" id="in-restaurar" accept=".json,application/json" hidden>
+  <p class="mudo pequeno">Restaurar não apaga nada: o que for diferente entra ao lado.</p>
+</aside>
+
+<aside id="painel-memoria" class="painel" hidden>
+  <div class="cab"><b>🧠 Memória</b><button class="ic" data-fechar>✕</button></div>
+  <p class="mudo pequeno">Tudo aqui vai junto em TODA conversa. A IA também guarda sozinha o que for importante (aparece "🧠 guardei"). Uma coisa por linha. Pode editar e apagar.</p>
+  <textarea class="campo" id="memoria-texto" rows="14" placeholder="Ex.: Meu nome é Maikon. Sou advogado em MG. Prefiro respostas curtas e em português simples."></textarea>
+  <div class="linha"><button class="bt primario" id="bt-mem-salvar">💾 Salvar memória</button><span id="mem-status" class="mudo pequeno"></span></div>
+</aside>
+
+<aside id="painel-config" class="painel" hidden>
+  <div class="cab"><b>⚙️ Configurar</b><button class="ic" data-fechar>✕</button></div>
+  <div id="config-corpo"></div>
+</aside>
+
+<div id="previa" hidden>
+  <div class="cab"><b id="previa-tit">👁 Prévia</b><span class="mudo pequeno" id="previa-tipo"></span><span style="flex:1"></span><button class="bt" id="previa-recarregar">⟳</button><button class="bt" id="previa-baixar">⤓</button><button class="ic" id="previa-fechar">✕</button></div>
+  <iframe id="previa-quadro" sandbox="allow-scripts allow-forms allow-modals allow-popups" title="Prévia do código"></iframe>
+  <div id="previa-erros" class="pequeno"></div>
+</div>
+
+<div id="aviso" hidden></div>
+
+<script src="js/00-base.js"></script>
+<script src="js/10-banco.js"></script>
+<script src="js/20-provedores.js"></script>
+<script src="js/30-memoria.js"></script>
+<script src="js/40-voz.js"></script>
+<script src="js/50-internet.js"></script>
+<script src="js/60-previa.js"></script>
+<script src="js/70-texto.js"></script>
+<script src="js/80-chat.js"></script>
+<script src="js/lib/cofre-arquivo.js"></script>
+<script src="js/lib/guia-maikon.js"></script>
+<script src="js/85-config.js"></script>
+<script src="js/87-cofre.js"></script>
+<script src="js/90-backup.js"></script>
+<script src="js/99-app.js"></script>
+</body>
+</html>
