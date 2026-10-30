@@ -10,6 +10,10 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.webkit.CookieManager;
+import android.webkit.GeolocationPermissions;
+import android.content.SharedPreferences;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.content.pm.PackageManager;
@@ -21,6 +25,15 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
+import org.json.JSONArray;
+import java.util.Locale;
+import org.json.JSONObject;
 
 import androidx.webkit.ServiceWorkerClientCompat;
 import androidx.webkit.ServiceWorkerControllerCompat;
@@ -49,6 +62,15 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> retornoArquivo;
     private static final int PEDIR_MICROFONE = 42;
     private PermissionRequest pedidoPendente;
+    private static final int PEDIR_VOZ = 43;
+    private static final int PEDIR_TUDO = 44;      // 🔓 o kit de autorizações, pedido UMA vez ao abrir
+    private static final int PEDIR_LOCAL = 45;     // 📍 localização pedida por uma página
+    private GeolocationPermissions.Callback geoRetorno;
+    private String geoOrigem;
+    private SpeechRecognizer reconhecedor;
+    private String vozLingua = "pt-BR";
+    private TextToSpeech fala;          // 🔊 a voz do Android (lê em voz alta, qualquer IA, sem chave)
+    private boolean falaPronta = false;
 
     @Override
     protected void onCreate(Bundle salvo) {
@@ -84,6 +106,8 @@ public class MainActivity extends Activity {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(true);
+        s.setGeolocationEnabled(true);      // 📍 páginas que pedem a localização
+        s.setJavaScriptCanOpenWindowsAutomatically(true);
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -127,6 +151,18 @@ public class MainActivity extends Activity {
                 return true;
             }
 
+            // 📍 localização: o Android pergunta ao usuário quando a página pede
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origem, GeolocationPermissions.Callback retorno) {
+                if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    retorno.invoke(origem, true, false);
+                    return;
+                }
+                geoOrigem = origem; geoRetorno = retorno;
+                requestPermissions(new String[]{ android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, PEDIR_LOCAL);
+            }
+
             // microfone/câmera: o Android pergunta ao usuário quando a página pede
             @Override
             public void onPermissionRequest(final PermissionRequest req) {
@@ -146,7 +182,11 @@ public class MainActivity extends Activity {
         });
 
         web.addJavascriptInterface(new Ponte(), "AndroidBridge");
+        web.addJavascriptInterface(new Voz(), "AndroidVoz"); // 🎤 ditado pelo Android (a "janelinha" não tem o do Chrome)
+        web.addJavascriptInterface(new Fala(), "AndroidFala"); // 🔊 ler em voz alta com as vozes do Android (a "janelinha" não tem speechSynthesis)
+        ligarFala();
         setContentView(web);
+        pedirTudoNaPrimeiraVez();
         if (salvo != null) web.restoreState(salvo);
         else web.loadUrl(INICIO);
     }
@@ -174,12 +214,65 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int pedido, String[] permissoes, int[] resultados) {
         super.onRequestPermissionsResult(pedido, permissoes, resultados);
+        if (pedido == PEDIR_VOZ) {
+            boolean okVoz = resultados.length > 0 && resultados[0] == PackageManager.PERMISSION_GRANTED;
+            if (okVoz) comecarVoz();
+            else js("window.__vozErro&&window.__vozErro(" + JSONObject.quote("Sem permissão de microfone. Libere em Configurações → Apps → este app → Permissões.") + ")");
+            return;
+        }
+        if (pedido == PEDIR_TUDO) { pedirBateria(); return; }
+        if (pedido == PEDIR_LOCAL && geoRetorno != null) {
+            boolean okLocal = false;
+            for (int r : resultados) if (r == PackageManager.PERMISSION_GRANTED) okLocal = true;
+            geoRetorno.invoke(geoOrigem, okLocal, false);
+            geoRetorno = null; geoOrigem = null;
+            return;
+        }
         if (pedido == PEDIR_MICROFONE && pedidoPendente != null) {
             boolean ok = resultados.length > 0;
             for (int r : resultados) if (r != PackageManager.PERMISSION_GRANTED) ok = false;
             if (ok) pedidoPendente.grant(pedidoPendente.getResources()); else pedidoPendente.deny();
             pedidoPendente = null;
         }
+    }
+
+    /** 🔓 Na 1ª vez que o app abre, pede de uma vez as autorizações que só valem com o "sim" do usuário.
+     *  Depois não pergunta mais (quem negou pode liberar em Configurações → Apps → este app → Permissões). */
+    private void pedirTudoNaPrimeiraVez() {
+        if (Build.VERSION.SDK_INT < 23) return;
+        SharedPreferences sp = getSharedPreferences("app-autorizacoes", MODE_PRIVATE);
+        if (sp.getBoolean("pediuTudo", false)) return;
+        sp.edit().putBoolean("pediuTudo", true).apply();
+        List<String> lista = new ArrayList<>();
+        lista.add("android.permission.RECORD_AUDIO");
+        lista.add("android.permission.CAMERA");
+        lista.add("android.permission.ACCESS_FINE_LOCATION");
+        lista.add("android.permission.ACCESS_COARSE_LOCATION");
+        if (Build.VERSION.SDK_INT >= 33) {
+            lista.add("android.permission.POST_NOTIFICATIONS");
+            lista.add("android.permission.READ_MEDIA_IMAGES");
+            lista.add("android.permission.READ_MEDIA_VIDEO");
+            lista.add("android.permission.READ_MEDIA_AUDIO");
+        } else {
+            lista.add("android.permission.READ_EXTERNAL_STORAGE");
+        }
+        List<String> falta = new ArrayList<>();
+        for (String p : lista) if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) falta.add(p);
+        if (!falta.isEmpty()) requestPermissions(falta.toArray(new String[0]), PEDIR_TUDO);
+        else pedirBateria();
+    }
+
+    /** 🔋 "Sem restrição de bateria": o Android para de fechar o app quando você sai para baixar algo e volta.
+     *  Pergunta uma vez só (é a janela do próprio Android: toque em Permitir). */
+    private void pedirBateria() {
+        try {
+            if (Build.VERSION.SDK_INT < 23) return;
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName())) return;
+            Intent i = new Intent("android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS");
+            i.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        } catch (Exception ignorado) { }
     }
 
     /** 🔒 Lacre (COOP/COEP): o que o sw.js fazia no navegador. Liga o "terminal real" (WebContainer). */
@@ -222,8 +315,14 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        if (web != null && web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        // ⬅ botão VOLTAR do celular: 1º a página fecha o que estiver aberto (painel, janela);
+        // 2º volta a página anterior; 3º na primeira tela NÃO fecha o app — só vai para o fundo, sem perder nada.
+        if (web == null) { moveTaskToBack(true); return; }
+        web.evaluateJavascript("(function(){try{return !!(window.__voltarApp&&window.__voltarApp())}catch(e){return false}})()", r -> {
+            if ("true".equals(r)) return;
+            if (web.canGoBack()) web.goBack();
+            else moveTaskToBack(true);
+        });
     }
 
     @Override
@@ -238,6 +337,132 @@ public class MainActivity extends Activity {
         if (web != null) web.evaluateJavascript("try{window.dispatchEvent(new Event('pagehide'));window.dispatchEvent(new Event('app-pausa'));}catch(e){}", null);
         super.onPause();
         CookieManager.getInstance().flush();
+    }
+
+    private void js(final String codigo) { runOnUiThread(() -> { if (web != null) web.evaluateJavascript(codigo, null); }); }
+
+    /** 🎤 Ouve uma frase com o reconhecimento de voz do próprio Android e devolve o texto para a página. */
+    private void comecarVoz() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            js("window.__vozErro&&window.__vozErro(" + JSONObject.quote("Este celular não tem o reconhecimento de voz do Google. Instale ou atualize o app Google.") + ")");
+            return;
+        }
+        if (reconhecedor != null) { try { reconhecedor.destroy(); } catch (Exception ignorado) { } }
+        reconhecedor = SpeechRecognizer.createSpeechRecognizer(this);
+        reconhecedor.setRecognitionListener(new RecognitionListener() {
+            @Override public void onReadyForSpeech(Bundle b) { }
+            @Override public void onBeginningOfSpeech() { }
+            @Override public void onRmsChanged(float v) { }
+            @Override public void onBufferReceived(byte[] b) { }
+            @Override public void onEndOfSpeech() { }
+            @Override public void onEvent(int tipo, Bundle b) { }
+            @Override public void onError(int erro) {
+                String m;
+                if (erro == SpeechRecognizer.ERROR_NO_MATCH || erro == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) m = "Não ouvi nada. Toque no microfone e fale.";
+                else if (erro == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) m = "Sem permissão de microfone.";
+                else if (erro == SpeechRecognizer.ERROR_NETWORK || erro == SpeechRecognizer.ERROR_NETWORK_TIMEOUT) m = "Sem internet para entender a voz.";
+                else m = "O reconhecimento de voz falhou (código " + erro + ").";
+                js("window.__vozErro&&window.__vozErro(" + JSONObject.quote(m) + ")");
+            }
+            @Override public void onResults(Bundle b) {
+                ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                String t = (r != null && !r.isEmpty()) ? r.get(0) : "";
+                js("window.__vozResultado&&window.__vozResultado(" + JSONObject.quote(t) + ")");
+            }
+            @Override public void onPartialResults(Bundle b) {
+                ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (r != null && !r.isEmpty()) js("window.__vozParcial&&window.__vozParcial(" + JSONObject.quote(r.get(0)) + ")");
+            }
+        });
+        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, vozLingua);
+        i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        reconhecedor.startListening(i);
+    }
+
+    /** 🔊 Liga a voz do Android. Quando fica pronta, avisa a página (window.__falaPronta). */
+    private void ligarFala() {
+        fala = new TextToSpeech(this, status -> {
+            falaPronta = status == TextToSpeech.SUCCESS;
+            if (!falaPronta) return;
+            try { fala.setLanguage(new Locale("pt", "BR")); } catch (Exception ignorado) { }
+            fala.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override public void onStart(String id) { js("window.__falaComecou&&window.__falaComecou(" + JSONObject.quote(id) + ")"); }
+                @Override public void onDone(String id) { js("(window.__falaFimPonte&&window.__falaFimPonte(" + JSONObject.quote(id) + "));(window.__falaFim&&window.__falaFim(" + JSONObject.quote(id) + "))"); }
+                @Override public void onStop(String id, boolean interrompido) { onDone(id); }
+                @Override public void onError(String id) { js("(window.__falaFimPonte&&window.__falaFimPonte(" + JSONObject.quote(id) + "));(window.__falaErro&&window.__falaErro(" + JSONObject.quote(id) + ",''))"); }
+            });
+            js("window.__falaPronta&&window.__falaPronta()");
+        });
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (fala != null) { try { fala.stop(); fala.shutdown(); } catch (Exception ignorado) { } }
+        if (reconhecedor != null) { try { reconhecedor.destroy(); } catch (Exception ignorado) { } }
+        super.onDestroy();
+    }
+
+    /** Ponte JavaScript → Android para a voz: window.AndroidVoz.ouvir("pt-BR") / parar(). */
+    class Voz {
+        @JavascriptInterface
+        public void ouvir(String lingua) {
+            vozLingua = (lingua == null || lingua.isEmpty()) ? "pt-BR" : lingua;
+            runOnUiThread(() -> {
+                if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{ android.Manifest.permission.RECORD_AUDIO }, PEDIR_VOZ);
+                    return;
+                }
+                comecarVoz();
+            });
+        }
+
+        @JavascriptInterface
+        public void parar() {
+            runOnUiThread(() -> { if (reconhecedor != null) { try { reconhecedor.stopListening(); } catch (Exception ignorado) { } } });
+        }
+    }
+
+    /** 🔊 Ponte JavaScript → Android para LER EM VOZ ALTA: window.AndroidFala.falar(id, texto, voz, velocidade, tom, naFila) / parar() / vozes(). */
+    class Fala {
+        @JavascriptInterface
+        public boolean pronta() { return falaPronta; }
+
+        @JavascriptInterface
+        public String vozes() {
+            JSONArray l = new JSONArray();
+            try {
+                if (falaPronta && fala.getVoices() != null) for (Voice v : fala.getVoices()) {
+                    Locale lo = v.getLocale();
+                    if (lo == null || !"pt".equalsIgnoreCase(lo.getLanguage())) continue;
+                    if (v.getFeatures() != null && v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) continue;
+                    JSONObject o = new JSONObject();
+                    o.put("nome", v.getName());
+                    o.put("lingua", lo.toLanguageTag());
+                    o.put("rede", v.isNetworkConnectionRequired());
+                    o.put("qualidade", v.getQuality());
+                    l.put(o);
+                }
+            } catch (Exception ignorado) { }
+            return l.toString();
+        }
+
+        @JavascriptInterface
+        public void falar(String id, String texto, String voz, float velocidade, float tom, boolean naFila) {
+            if (!falaPronta || fala == null) { js("(window.__falaFimPonte&&window.__falaFimPonte(" + JSONObject.quote(id) + "));(window.__falaErro&&window.__falaErro(" + JSONObject.quote(id) + "," + JSONObject.quote("A voz do Android ainda não ligou. Confira em Configurações do celular → Saída de texto para fala.") + "))"); return; }
+            try {
+                if (voz != null && !voz.isEmpty() && fala.getVoices() != null) for (Voice v : fala.getVoices()) if (voz.equals(v.getName())) { fala.setVoice(v); break; }
+                fala.setSpeechRate(velocidade > 0 ? velocidade : 1f);
+                fala.setPitch(tom > 0 ? tom : 1f);
+                fala.speak(texto == null ? "" : texto, naFila ? TextToSpeech.QUEUE_ADD : TextToSpeech.QUEUE_FLUSH, null, id);
+            } catch (Exception e) {
+                js("(window.__falaFimPonte&&window.__falaFimPonte(" + JSONObject.quote(id) + "));(window.__falaErro&&window.__falaErro(" + JSONObject.quote(id) + "," + JSONObject.quote(String.valueOf(e.getMessage())) + "))");
+            }
+        }
+
+        @JavascriptInterface
+        public void parar() { try { if (fala != null) fala.stop(); } catch (Exception ignorado) { } }
     }
 
     /** Ponte JavaScript → Android: salva arquivos baixados na pasta Downloads. */
@@ -262,6 +487,34 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 return String.valueOf(e.getMessage());
             }
+        }
+
+        /** 🌐 Busca uma página da internet pelo próprio Android (sem a trava de "CORS" do navegador).
+         *  Usado pela IA para pesquisar (DuckDuckGo) e ler links. Responde em window.__buscaFim(id, ok, texto). */
+        @JavascriptInterface
+        public void buscar(final String id, final String endereco) {
+            new Thread(() -> {
+                boolean ok = false; String texto;
+                HttpURLConnection c = null;
+                try {
+                    if (endereco == null || !endereco.matches("(?i)^https?://.+")) throw new Exception("endereço inválido");
+                    c = (HttpURLConnection) new URL(endereco).openConnection();
+                    c.setInstanceFollowRedirects(true);
+                    c.setConnectTimeout(15000); c.setReadTimeout(20000);
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Mobile Safari/537.36");
+                    c.setRequestProperty("Accept-Language", "pt-BR,pt;q=0.9");
+                    int cod = c.getResponseCode();
+                    InputStream in = cod >= 400 ? c.getErrorStream() : c.getInputStream();
+                    ByteArrayOutputStream b = new ByteArrayOutputStream();
+                    if (in != null) { byte[] buf = new byte[16384]; int n; while ((n = in.read(buf)) > 0 && b.size() < 3000000) b.write(buf, 0, n); in.close(); }
+                    texto = new String(b.toByteArray(), StandardCharsets.UTF_8);
+                    ok = cod < 400;
+                    if (!ok) texto = "HTTP " + cod;
+                } catch (Exception e) {
+                    texto = String.valueOf(e.getMessage());
+                } finally { if (c != null) c.disconnect(); }
+                js("window.__buscaFim&&window.__buscaFim(" + JSONObject.quote(String.valueOf(id)) + "," + ok + "," + JSONObject.quote(texto) + ")");
+            }).start();
         }
 
         @JavascriptInterface

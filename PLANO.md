@@ -1,19 +1,19 @@
 # 📋 Plano do projeto: Meu-Chat-29-10-E (1)
 
-_Gerado em 29/10/2026, 20:54:45 — sem IA, lendo os arquivos._
+_Gerado em 29/10/2026, 21:02:46 — sem IA, lendo os arquivos._
 
 ## 📊 Visão geral
 | Item | Valor |
 |---|---|
-| Arquivos | 40 |
-| Linhas | 1.777 |
+| Arquivos | 39 |
+| Linhas | 1.641 |
 | Telas/páginas | 1 |
 | Rotas do backend | 0 |
 | Chamadas do app | 0 |
 | Tabelas do banco | 0 |
 | Variáveis de ambiente | 0 |
 
-**Linguagens:** JavaScript (17), Imagem (15), Imagem SVG (2), CSS (1), Ícone (1), HTML (1), Outros (1), JSON (1), Markdown (1)
+**Linguagens:** JavaScript (17), Imagem (15), Imagem SVG (2), CSS (1), Ícone (1), HTML (1), Outros (1), JSON (1)
 
 ## 💡 O que fazer (em ordem)
 1. 🧹 Tirar a Replit de 2 arquivo(s) (🏗️ Preparar → Fazer tudo)
@@ -130,7 +130,6 @@ _Nenhuma._
 ├─ index.html
 ├─ LEIA-ME.txt
 ├─ manifest.json
-├─ PLANO.md
 ├─ service-worker.js
 └─ sw.js
 ```

@@ -1,7 +1,7 @@
-// service-worker.js — gerado pelo Mini SK em 29/10/2026, 20:55:42
+// service-worker.js — gerado pelo Mini SK em 29/10/2026, 21:03:39
 // Não precisa mexer: ele guarda sozinho o que o app usa.
 const PREFIXO = 'sk-meu-chat-29-10-e-1-';
-const CACHE = PREFIXO + 'mvu7bicp';
+const CACHE = PREFIXO + 'mvu7lr1y';
 // Lista feita automaticamente (para funcionar sem internet logo após instalar)
 const GUARDAR = [
   "./",

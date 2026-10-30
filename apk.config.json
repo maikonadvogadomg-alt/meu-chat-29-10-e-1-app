@@ -1,10 +1,10 @@
 {
-  "nome": "Meu-Chat-29-10-E (1)",
+  "nome": "Meu-Chat-29-10-E (teste 10300004)",
   "arquivo": "meu-chat-29-10-e-1",
-  "pacote": "com.maikonadvogadomgalt.meuchat2910e1",
+  "pacote": "com.maikonadvogadomgalt.meuchat2910e1.nteste10300004",
   "versao": "1.0",
   "versaoCodigo": 1,
   "cor": "#0f1420",
   "orientacao": "unspecified",
-  "lacre": true
+  "lacre": false
 }
